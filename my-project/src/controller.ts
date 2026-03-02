@@ -3,20 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import mysql from 'mysql2/promise';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
-const pool = mysql.createPool({
-  host: '127.0.0.1',
-  user: 'root',
-  password: '', 
-  database: 'bitespeed_db', 
-  port: 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  // These three lines solve most "hanging" connection issues on Windows
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
-  connectTimeout: 20000 
-});
+const pool = mysql.createPool("mysql://root:@localhost:3306/bitespeed_db");
+
 
 const adapter = new PrismaMariaDb(pool as any);
 const prisma = new PrismaClient({ adapter });
