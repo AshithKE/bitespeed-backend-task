@@ -1,8 +1,7 @@
-import { defineConfig } from "@prisma/config";
+import { defineConfig } from '@prisma/config';
 
 export default defineConfig({
-  schema: "prisma/schema.prisma",
   datasource: {
-    url: "mysql://root:@localhost:3306/bitespeed_db",
+    url: "mysql://root:@127.0.0.1:3306/bitespeed_db",
   },
 });

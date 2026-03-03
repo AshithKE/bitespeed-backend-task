@@ -1,6 +1,7 @@
 import express from 'express';
 import "dotenv/config";
 import { identifyContact } from './controller.js'; // Note the .js extension
+import { pool } from './controller'; // This tells index.ts where to find 'pool'
 
 const app = express();
 
@@ -16,6 +17,22 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+// ... your imports (express, etc.) are at the top
+
+// PASTE THIS PART HERE:
+pool.getConnection()
+  .then(conn => {
+    console.log("✅ DATABASE CONNECTED SUCCESSFULLY!");
+    conn.release();
+  })
+  .catch(err => {
+    console.log("❌ DATABASE CONNECTION FAILED:", err.message);
+  });
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server is running on http://localhost:${PORT}`);
+});
 
 app.listen(PORT, () => {
   console.log(`-----------------------------------------------`);

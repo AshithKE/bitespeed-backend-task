@@ -3,9 +3,18 @@ import { PrismaClient } from '@prisma/client';
 import mysql from 'mysql2/promise';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
-const pool = mysql.createPool("mysql://root:@localhost:3306/bitespeed_db");
-
-
+// Look for this line and add 'export' if it's missing
+export const pool = mysql.createPool({ 
+  host: '127.0.0.1', 
+  // ... rest of your config// Forcing IPv4
+  user: 'root',
+  password: '', 
+  database: 'bitespeed_db', 
+  port: 3307,
+  waitForConnections: true,
+  connectionLimit: 10,
+  connectTimeout: 20000 
+});   
 const adapter = new PrismaMariaDb(pool as any);
 const prisma = new PrismaClient({ adapter });
 

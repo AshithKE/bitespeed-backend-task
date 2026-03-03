@@ -1,19 +1,20 @@
 generator client {
-  provider = "prisma-client-js"
-  // Note: No 'previewFeatures' needed for this adapter in v7
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"] // <--- MUST have this
 }
 
 datasource db {
   provider = "mysql"
+  // DO NOT have a 'url' line here
 }
-// ... your contact model
-model contact {
-  id              Int       @id @default(autoincrement())
-  phoneNumber     String?
-  email           String?
-  linkedId        Int?
-  linkPrecedence  String    @default("primary")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+
+model Contact {
+  id             Int      @id @default(autoincrement())
+  phoneNumber    String?
+  email          String?
+  linkedId       Int?
+  linkPrecedence String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
 }
