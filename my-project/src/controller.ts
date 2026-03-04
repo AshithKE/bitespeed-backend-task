@@ -8,22 +8,27 @@ export const pool = mysql.createPool({
   password: process.env.DB_PASSWORD, 
   database: process.env.DB_NAME, 
   port: Number(process.env.DB_PORT) || 3306,
-  // ADD THIS LINE BELOW TO FIX THE "SECURE CONNECTION" ERROR
   ssl: { rejectUnauthorized: false }, 
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
 
+const adapter = new PrismaMariaDb(pool as any);
+export const prisma = new PrismaClient({ adapter }); // This allows Prisma to use your Aiven pool
+
 // CORRECT: SQL treats 'primary' as a string value
 const sql = `INSERT INTO Contact (phoneNumber, email, linkPrecedence) VALUES (?, ?, 'primary')`;
-const adapter = new PrismaMariaDb(pool as any);
-export const prisma = new PrismaClient({ adapter });
+
 
 export const identify = async (req: any, res: any) => {
   const { email, phoneNumber } = req.body;
   if (!email && !phoneNumber) return res.status(400).json({ error: "Email or Phone required" });
-
+// Inside your identify function:
+const [result] = await pool.execute(
+  `INSERT INTO Contact (phoneNumber, email, linkPrecedence) VALUES (?, ?, 'primary')`,
+  [phoneNumber, email]
+);
   try {
     // 1. Find all related contacts
     const [matches]: any = await pool.execute(
