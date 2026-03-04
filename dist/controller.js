@@ -10,12 +10,9 @@ exports.pool = promise_1.default.createPool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: Number(process.env.DB_PORT) || 3306,
-    // ADD THIS LINE BELOW TO FIX THE "SECURE CONNECTION" ERROR
-    ssl: { rejectUnauthorized: false },
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+    port: Number(process.env.DB_PORT),
+    // ADD THIS LINE BELOW:
+    ssl: { rejectUnauthorized: false }
 });
 const query = `INSERT INTO Contact (email, phoneNumber, linkPrecedence) 
                VALUES (?, ?, 'primary')`; // Quotes make it a string value
