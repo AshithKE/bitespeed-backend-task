@@ -25,7 +25,7 @@ const identify = async (req, res) => {
         // 1. Find all related contacts
         const [matches] = await exports.pool.execute('SELECT * FROM Contact WHERE email = ? OR phoneNumber = ?', [email || null, phoneNumber || null]);
         if (matches.length === 0) {
-            const [res1] = await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, "primary", NOW(), NOW())', [email, phoneNumber]);
+            const [res1] = await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, 'primary', NOW(), NOW())', [email, phoneNumber]);
             return res.json({ contact: { primaryContatctId: res1.insertId, emails: [email].filter(Boolean), phoneNumbers: [phoneNumber].filter(Boolean), secondaryContactIds: [] } });
         }
         // 2. Identify all primary contacts involved
@@ -35,12 +35,12 @@ const identify = async (req, res) => {
         // 3. MERGE LOGIC: Turn other primaries into secondaries
         for (let i = 1; i < allPrimaries.length; i++) {
             const otherPrimary = allPrimaries[i];
-            await exports.pool.execute('UPDATE Contact SET linkPrecedence = "secondary", linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?', [rootPrimary.id, otherPrimary.id, otherPrimary.id]);
+            await exports.pool.execute("UPDATE Contact SET linkPrecedence = 'secondary', linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?", [rootPrimary.id, otherPrimary.id, otherPrimary.id]);
         }
         // 4. ADD NEW INFO: Create secondary if this specific combo is new
         const exactMatch = matches.some((m) => m.email === email && m.phoneNumber === phoneNumber);
         if (!exactMatch && email && phoneNumber) {
-            await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, "secondary", NOW(), NOW())', [email, phoneNumber, rootPrimary.id]);
+            await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, 'secondary', NOW(), NOW())', [email, phoneNumber, rootPrimary.id]);
         }
         // 5. Consolidated Response
         const [allRelated] = await exports.pool.execute('SELECT * FROM Contact WHERE id = ? OR linkedId = ? ORDER BY createdAt ASC', [rootPrimary.id, rootPrimary.id]);
