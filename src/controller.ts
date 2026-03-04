@@ -1,21 +1,16 @@
 import mysql from 'mysql2/promise';
 
-
 export const pool = mysql.createPool({ 
   host: process.env.DB_HOST, 
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD, 
   database: process.env.DB_NAME, 
-  port: Number(process.env.DB_PORT),
-  // ADD THIS LINE BELOW:
-  ssl: { rejectUnauthorized: false } 
+  port: Number(process.env.DB_PORT) || 3306,
+  ssl: { rejectUnauthorized: false },
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
-const query = `INSERT INTO Contact (email, phoneNumber, linkPrecedence) 
-               VALUES (?, ?, 'primary')`; // Quotes make it a string value
-
-//const adapter = new PrismaMariaDb(pool as any);
-//export const prisma = new PrismaClient({ adapter });
-
 
 export const identify = async (req: any, res: any) => {
   const { email, phoneNumber } = req.body;
@@ -28,39 +23,55 @@ export const identify = async (req: any, res: any) => {
       [email || null, phoneNumber || null]
     );
 
+    // If no match found, create a new primary contact
     if (matches.length === 0) {
       const [res1]: any = await pool.execute(
-        'INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, "primary", NOW(), NOW())',
+        "INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, 'primary', NOW(), NOW())",
         [email, phoneNumber]
       );
-      return res.json({ contact: { primaryContatctId: res1.insertId, emails: [email].filter(Boolean), phoneNumbers: [phoneNumber].filter(Boolean), secondaryContactIds: [] } });
+      return res.json({ 
+        contact: { 
+          primaryContatctId: res1.insertId, 
+          emails: [email].filter(Boolean), 
+          phoneNumbers: [phoneNumber].filter(Boolean), 
+          secondaryContactIds: [] 
+        } 
+      });
     }
 
     // 2. Identify all primary contacts involved
-    const primaryIds = [...new Set(matches.map((m: any) => m.linkPrecedence === 'primary' ? m.id : m.linkedId))];
-    const [allPrimaries]: any = await pool.execute(`SELECT * FROM Contact WHERE id IN (${primaryIds.join(',')}) ORDER BY createdAt ASC`);
-    
-    const rootPrimary = allPrimaries[0]; // The oldest one stays primary
+    // We map every match to its primary ID (either itself if primary, or its linkedId if secondary)
+    const linkedPrimaryIds = matches.map((m: any) => m.linkPrecedence === 'primary' ? m.id : m.linkedId);
+    const uniquePrimaryIds = [...new Set(linkedPrimaryIds)].filter(Boolean);
 
-    // 3. MERGE LOGIC: Turn other primaries into secondaries
+    // Fetch all related primary contacts to find the oldest one
+    const [allPrimaries]: any = await pool.execute(
+      `SELECT * FROM Contact WHERE id IN (${uniquePrimaryIds.join(',')}) ORDER BY createdAt ASC`
+    );
+    
+    const rootPrimary = allPrimaries[0]; // The oldest one stays 'primary'
+
+    // 3. MERGE LOGIC: If multiple primaries found, turn the newer ones into 'secondary'
     for (let i = 1; i < allPrimaries.length; i++) {
       const otherPrimary = allPrimaries[i];
-      await pool.execute(
-        'UPDATE Contact SET linkPrecedence = "secondary", linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?',
-        [rootPrimary.id, otherPrimary.id, otherPrimary.id]
-      );
+      if (otherPrimary.id !== rootPrimary.id) {
+        await pool.execute(
+          "UPDATE Contact SET linkPrecedence = 'secondary', linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?",
+          [rootPrimary.id, otherPrimary.id, otherPrimary.id]
+        );
+      }
     }
 
-    // 4. ADD NEW INFO: Create secondary if this specific combo is new
+    // 4. ADD NEW INFO: Create secondary if this specific email/phone combo hasn't been seen
     const exactMatch = matches.some((m: any) => m.email === email && m.phoneNumber === phoneNumber);
     if (!exactMatch && email && phoneNumber) {
       await pool.execute(
-        'INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, "secondary", NOW(), NOW())',
+        "INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, 'secondary', NOW(), NOW())",
         [email, phoneNumber, rootPrimary.id]
       );
     }
 
-    // 5. Consolidated Response
+    // 5. Consolidated Response: Fetch everything linked to the rootPrimary
     const [allRelated]: any = await pool.execute(
       'SELECT * FROM Contact WHERE id = ? OR linkedId = ? ORDER BY createdAt ASC',
       [rootPrimary.id, rootPrimary.id]
@@ -71,10 +82,13 @@ export const identify = async (req: any, res: any) => {
         primaryContatctId: rootPrimary.id,
         emails: [...new Set(allRelated.map((c: any) => c.email).filter(Boolean))],
         phoneNumbers: [...new Set(allRelated.map((c: any) => c.phoneNumber).filter(Boolean))],
-        secondaryContactIds: allRelated.filter((c: any) => c.linkPrecedence === 'secondary').map((c: any) => c.id)
+        secondaryContactIds: allRelated
+          .filter((c: any) => c.linkPrecedence === 'secondary')
+          .map((c: any) => c.id)
       }
     });
   } catch (error: any) {
+    console.error("Database Error:", error.message);
     return res.status(500).json({ error: error.message });
   }
 };
