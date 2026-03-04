@@ -15,9 +15,8 @@ export const pool = mysql.createPool({
   queueLimit: 0
 });
 
-const sql = `INSERT INTO Contact (email, phoneNumber, linkPrecedence) 
-             VALUES (?, ?, 'primary')`; // Added single quotes
-
+// CORRECT: SQL treats 'primary' as a string value
+const sql = `INSERT INTO Contact (phoneNumber, email, linkPrecedence) VALUES (?, ?, 'primary')`;
 const adapter = new PrismaMariaDb(pool as any);
 export const prisma = new PrismaClient({ adapter });
 
