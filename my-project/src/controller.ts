@@ -24,11 +24,7 @@ const sql = `INSERT INTO Contact (phoneNumber, email, linkPrecedence) VALUES (?,
 export const identify = async (req: any, res: any) => {
   const { email, phoneNumber } = req.body;
   if (!email && !phoneNumber) return res.status(400).json({ error: "Email or Phone required" });
-// Inside your identify function:
-const [result] = await pool.execute(
-  `INSERT INTO Contact (phoneNumber, email, linkPrecedence) VALUES (?, ?, 'primary')`,
-  [phoneNumber, email]
-);
+
   try {
     // 1. Find all related contacts
     const [matches]: any = await pool.execute(
@@ -36,12 +32,20 @@ const [result] = await pool.execute(
       [email || null, phoneNumber || null]
     );
 
+    // If no match, create a new primary contact
     if (matches.length === 0) {
       const [res1]: any = await pool.execute(
-        'INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, "primary", NOW(), NOW())',
+        "INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, 'primary', NOW(), NOW())",
         [email, phoneNumber]
       );
-      return res.json({ contact: { primaryContatctId: res1.insertId, emails: [email].filter(Boolean), phoneNumbers: [phoneNumber].filter(Boolean), secondaryContactIds: [] } });
+      return res.json({ 
+        contact: { 
+          primaryContatctId: res1.insertId, 
+          emails: [email].filter(Boolean), 
+          phoneNumbers: [phoneNumber].filter(Boolean), 
+          secondaryContactIds: [] 
+        } 
+      });
     }
 
     // 2. Identify all primary contacts involved
@@ -50,20 +54,20 @@ const [result] = await pool.execute(
     
     const rootPrimary = allPrimaries[0]; // The oldest one stays primary
 
-    // 3. MERGE LOGIC: Turn other primaries into secondaries
+    // 3. MERGE LOGIC: Turn other primaries into secondaries (using single quotes)
     for (let i = 1; i < allPrimaries.length; i++) {
       const otherPrimary = allPrimaries[i];
       await pool.execute(
-        'UPDATE Contact SET linkPrecedence = "secondary", linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?',
+        "UPDATE Contact SET linkPrecedence = 'secondary', linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?",
         [rootPrimary.id, otherPrimary.id, otherPrimary.id]
       );
     }
 
-    // 4. ADD NEW INFO: Create secondary if this specific combo is new
+    // 4. ADD NEW INFO: Create secondary if this specific combo is new (using single quotes)
     const exactMatch = matches.some((m: any) => m.email === email && m.phoneNumber === phoneNumber);
     if (!exactMatch && email && phoneNumber) {
       await pool.execute(
-        'INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, "secondary", NOW(), NOW())',
+        "INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, 'secondary', NOW(), NOW())",
         [email, phoneNumber, rootPrimary.id]
       );
     }
