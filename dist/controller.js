@@ -3,21 +3,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.identify = exports.pool = void 0;
+exports.identify = exports.prisma = exports.pool = void 0;
 const promise_1 = __importDefault(require("mysql2/promise"));
+const adapter_mariadb_1 = require("@prisma/adapter-mariadb");
+const client_1 = require("@prisma/client");
 exports.pool = promise_1.default.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     port: Number(process.env.DB_PORT),
-    // ADD THIS LINE BELOW:
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false } // Required for Aiven
 });
-const query = `INSERT INTO Contact (email, phoneNumber, linkPrecedence) 
-               VALUES (?, ?, 'primary')`; // Quotes make it a string value
-//const adapter = new PrismaMariaDb(pool as any);
-//export const prisma = new PrismaClient({ adapter });
+const adapter = new adapter_mariadb_1.PrismaMariaDb(exports.pool);
+exports.prisma = new client_1.PrismaClient({ adapter });
 const identify = async (req, res) => {
     const { email, phoneNumber } = req.body;
     if (!email && !phoneNumber)
@@ -26,7 +25,7 @@ const identify = async (req, res) => {
         // 1. Find all related contacts
         const [matches] = await exports.pool.execute('SELECT * FROM Contact WHERE email = ? OR phoneNumber = ?', [email || null, phoneNumber || null]);
         if (matches.length === 0) {
-            const [res1] = await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, "primary", NOW(), NOW())', [email, phoneNumber]);
+            const [res1] = await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, 'primary', NOW(), NOW())', [email, phoneNumber]);
             return res.json({ contact: { primaryContatctId: res1.insertId, emails: [email].filter(Boolean), phoneNumbers: [phoneNumber].filter(Boolean), secondaryContactIds: [] } });
         }
         // 2. Identify all primary contacts involved
@@ -36,12 +35,12 @@ const identify = async (req, res) => {
         // 3. MERGE LOGIC: Turn other primaries into secondaries
         for (let i = 1; i < allPrimaries.length; i++) {
             const otherPrimary = allPrimaries[i];
-            await exports.pool.execute('UPDATE Contact SET linkPrecedence = "secondary", linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?', [rootPrimary.id, otherPrimary.id, otherPrimary.id]);
+            await exports.pool.execute("UPDATE Contact SET linkPrecedence = 'secondary', linkedId = ?, updatedAt = NOW() WHERE id = ? OR linkedId = ?", [rootPrimary.id, otherPrimary.id, otherPrimary.id]);
         }
         // 4. ADD NEW INFO: Create secondary if this specific combo is new
         const exactMatch = matches.some((m) => m.email === email && m.phoneNumber === phoneNumber);
         if (!exactMatch && email && phoneNumber) {
-            await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, "secondary", NOW(), NOW())', [email, phoneNumber, rootPrimary.id]);
+            await exports.pool.execute('INSERT INTO Contact (email, phoneNumber, linkedId, linkPrecedence, createdAt, updatedAt) VALUES (?, ?, ?, 'secondary', NOW(), NOW())', [email, phoneNumber, rootPrimary.id]);
         }
         // 5. Consolidated Response
         const [allRelated] = await exports.pool.execute('SELECT * FROM Contact WHERE id = ? OR linkedId = ? ORDER BY createdAt ASC', [rootPrimary.id, rootPrimary.id]);
